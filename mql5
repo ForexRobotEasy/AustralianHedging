@@ -1,0 +1,82 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                                      AustralianHedging |
+//|                                      Developer's site: forexroboteasy.com|
+//|                                                  Developed by: Forex Robot Easy Team|
+//+------------------------------------------------------------------+
+#property copyright 'forexroboteasy.com'
+#property link      'forexroboteasy.com'
+#property version   '1.00'
+#property strict
+
+input string FirstPair = 'EURUSD';
+input string SecondPair = 'AUDUSD';
+input int TradeFrequency = 1; // In minutes
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Enable auto-trading
+   if(!IsTradeAllowed())
+   {
+      Print('Auto-trading is not enabled. Please enable auto-trading in the terminal settings.');
+      return INIT_FAILED;
+   }
+   
+   // Validate inputs
+   if(StringTrimLeft(FirstPair) == '' || StringTrimLeft(SecondPair) == '')
+   {
+      Print('Please input the first and second trading tools.');
+      return INIT_FAILED;
+   }
+   
+   // Set up chart
+   ChartSetSymbolPeriod(0, FirstPair, PERIOD_M1);
+   
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   // Check trade frequency
+   static datetime lastTradeTime = 0;
+   if(TimeCurrent() - lastTradeTime < TradeFrequency * 60)
+      return;
+   
+   // Get inverse correlation
+   double correlation = MathAbs(iCorrelation(NULL, 0, FirstPair, SecondPair, 60, PRICE_CLOSE, MODE_SMA, 0));
+   
+   // Check if correlation is high
+   if(correlation > 0.8)
+   {
+      // Open trades
+      double lotSize = NormalizeDouble(AccountBalance() / 1000, 2);
+      int ticket1 = OrderSend(FirstPair, OP_BUY, lotSize, Ask, 10, 0, 0, '', 0, 0, clrGreen);
+      int ticket2 = OrderSend(SecondPair, OP_SELL, lotSize, Bid, 10, 0, 0, '', 0, 0, clrRed);
+      
+      // Check for trade execution errors
+      if(ticket1 <= 0 || ticket2 <= 0)
+         Print('Error opening trades: ', GetLastError());
+      
+      // Update last trade time
+      lastTradeTime = TimeCurrent();
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   // Close all open trades
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+         OrderClose(OrderTicket(), OrderLots(), OrderClosePrice(), 10, clrWhite);
+   }
+}
